@@ -1,0 +1,65 @@
+import random
+import os
+
+WIDTH = 21
+HEIGHT = 21
+maze = [['#'] * WIDTH for _ in range(HEIGHT)]
+DIRS = [(0, -2), (2, 0), (0, 2), (-2, 0)]
+
+def print_maze(player_x, player_y):
+    os.system('cls' if os.name == 'nt' else 'clear')  # Clears terminal
+    for y in range(HEIGHT):
+        row = ''
+        for x in range(WIDTH):
+            if x == player_x and y == player_y:
+                row += 'P'
+            else:
+                row += maze[y][x]
+        print(row)
+
+def is_in_bounds(x, y):
+    return 0 < x < WIDTH-1 and 0 < y < HEIGHT-1
+
+def generate_maze(x, y):
+    maze[y][x] = ' '
+    random.shuffle(DIRS)
+    for dx, dy in DIRS:
+        nx, ny = x + dx, y + dy
+        if is_in_bounds(nx, ny) and maze[ny][nx] == '#':
+            maze[y + dy // 2][x + dx // 2] = ' '
+            generate_maze(nx, ny)
+
+# Generate the maze
+generate_maze(1, 1)
+
+# Start position
+player_x, player_y = 1, 1
+
+# Game loop
+while True:
+    print_maze(player_x, player_y)
+    move = input("Move (WASD): ").lower()
+    dx, dy = 0, 0
+    if move == 'w':
+        dy = -1
+    elif move == 's':
+        dy = 1
+    elif move == 'a':
+        dx = -1
+    elif move == 'd':
+        dx = 1
+    else:
+        continue  # Invalid input, skip
+
+    new_x = player_x + dx
+    new_y = player_y + dy
+
+    # Only move if it's a path
+    if maze[new_y][new_x] == ' ':
+        player_x, player_y = new_x, new_y
+
+    # Exit condition (e.g., bottom-right corner)
+    if player_x == WIDTH - 2 and player_y == HEIGHT - 2:
+        print_maze(player_x, player_y)
+        print("🎉 You reached the goal!")
+        break
