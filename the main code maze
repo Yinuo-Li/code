@@ -1,65 +1,123 @@
+import pygame
 import random
-import os
 
-WIDTH = 21
-HEIGHT = 21
-maze = [['#'] * WIDTH for _ in range(HEIGHT)]
+# Settings
+CELL_SIZE = 20
+GRID_WIDTH = 21
+GRID_HEIGHT = 21
+WINDOW_WIDTH = CELL_SIZE * GRID_WIDTH
+WINDOW_HEIGHT = CELL_SIZE * GRID_HEIGHT
+
+# Colors
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+PLAYER_COLOR = (0, 255, 0)
+GOAL_COLOR = (255, 0, 0)
+PATH_COLOR = (200, 200, 200)
+TEXT_COLOR = (50, 50, 50)
+
+# Pygame setup
+pygame.init()
+screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
+pygame.display.set_caption("Maze Game")
+clock = pygame.time.Clock()
+font = pygame.font.SysFont(None, 36)
+
+# Maze generation
 DIRS = [(0, -2), (2, 0), (0, 2), (-2, 0)]
 
-def print_maze(player_x, player_y):
-    os.system('cls' if os.name == 'nt' else 'clear')  # Clears terminal
-    for y in range(HEIGHT):
-        row = ''
-        for x in range(WIDTH):
-            if x == player_x and y == player_y:
-                row += 'P'
+def generate_maze(width, height):
+    maze = [['#'] * width for _ in range(height)]
+
+    def is_in_bounds(x, y):
+        return 0 < x < width-1 and 0 < y < height-1
+
+    def carve(x, y):
+        maze[y][x] = ' '
+        random.shuffle(DIRS)
+        for dx, dy in DIRS:
+            nx, ny = x + dx, y + dy
+            if is_in_bounds(nx, ny) and maze[ny][nx] == '#':
+                maze[y + dy // 2][x + dx // 2] = ' '
+                carve(nx, ny)
+
+    carve(1, 1)
+    return maze
+
+def draw_maze(maze, player_pos, goal_pos, score):
+    screen.fill(WHITE)
+    for y in range(len(maze)):
+        for x in range(len(maze[0])):
+            rect = pygame.Rect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE)
+            if maze[y][x] == '#':
+                pygame.draw.rect(screen, BLACK, rect)
             else:
-                row += maze[y][x]
-        print(row)
+                pygame.draw.rect(screen, PATH_COLOR, rect)
 
-def is_in_bounds(x, y):
-    return 0 < x < WIDTH-1 and 0 < y < HEIGHT-1
+    # Draw player and goal
+    px, py = player_pos
+    gx, gy = goal_pos
+    pygame.draw.rect(screen, PLAYER_COLOR, (px * CELL_SIZE, py * CELL_SIZE, CELL_SIZE, CELL_SIZE))
+    pygame.draw.rect(screen, GOAL_COLOR, (gx * CELL_SIZE, gy * CELL_SIZE, CELL_SIZE, CELL_SIZE))
 
-def generate_maze(x, y):
-    maze[y][x] = ' '
-    random.shuffle(DIRS)
-    for dx, dy in DIRS:
-        nx, ny = x + dx, y + dy
-        if is_in_bounds(nx, ny) and maze[ny][nx] == '#':
-            maze[y + dy // 2][x + dx // 2] = ' '
-            generate_maze(nx, ny)
+    # Draw score
+    text = font.render(f"Score: {score}", True, TEXT_COLOR)
+    screen.blit(text, (10, 10))
+    pygame.display.flip()
 
-# Generate the maze
-generate_maze(1, 1)
+def show_message(message):
+    screen.fill(WHITE)
+    text = font.render(message, True, TEXT_COLOR)
+    rect = text.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2))
+    screen.blit(text, rect)
+    pygame.display.flip()
+    waiting = True
+    while waiting:
+        for event in pygame.event.get():
+            if event.type == pygame.KEYDOWN or event.type == pygame.MOUSEBUTTONDOWN:
+                waiting = False
+            elif event.type == pygame.QUIT:
+                pygame.quit()
+                exit()
 
-# Start position
-player_x, player_y = 1, 1
+# Main game loop
+score = 0
+running = True
 
-# Game loop
-while True:
-    print_maze(player_x, player_y)
-    move = input("Move (WASD): ").lower()
-    dx, dy = 0, 0
-    if move == 'w':
-        dy = -1
-    elif move == 's':
-        dy = 1
-    elif move == 'a':
-        dx = -1
-    elif move == 'd':
-        dx = 1
-    else:
-        continue  # Invalid input, skip
+while running:
+    maze = generate_maze(GRID_WIDTH, GRID_HEIGHT)
+    player_x, player_y = 1, 1
+    goal_x, goal_y = GRID_WIDTH - 2, GRID_HEIGHT - 2
 
-    new_x = player_x + dx
-    new_y = player_y + dy
+    while True:
+        draw_maze(maze, (player_x, player_y), (goal_x, goal_y), score)
 
-    # Only move if it's a path
-    if maze[new_y][new_x] == ' ':
-        player_x, player_y = new_x, new_y
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+                break
 
-    # Exit condition (e.g., bottom-right corner)
-    if player_x == WIDTH - 2 and player_y == HEIGHT - 2:
-        print_maze(player_x, player_y)
-        print("🎉 You reached the goal!")
-        break
+        keys = pygame.key.get_pressed()
+        dx = dy = 0
+        if keys[pygame.K_LEFT]:
+            dx = -1
+        elif keys[pygame.K_RIGHT]:
+            dx = 1
+        elif keys[pygame.K_UP]:
+            dy = -1
+        elif keys[pygame.K_DOWN]:
+            dy = 1
+
+        new_x, new_y = player_x + dx, player_y + dy
+        if 0 <= new_x < GRID_WIDTH and 0 <= new_y < GRID_HEIGHT:
+            if maze[new_y][new_x] == ' ':
+                player_x, player_y = new_x, new_y
+
+        if (player_x, player_y) == (goal_x, goal_y):
+            score += 1
+            show_message(f"Level Complete! Score: {score}\nPress any key to continue.")
+            break
+
+        clock.tick(10)
+
+pygame.quit()
