@@ -1,123 +1,690 @@
 import pygame
 import random
+import sys
+import math
 
-# Settings
-CELL_SIZE = 20
-GRID_WIDTH = 21
-GRID_HEIGHT = 21
-WINDOW_WIDTH = CELL_SIZE * GRID_WIDTH
-WINDOW_HEIGHT = CELL_SIZE * GRID_HEIGHT
+# Settings - Made much larger and harder
+CELL_SIZE = 24  # Slightly larger for better sprite detail
+BASE_GRID_SIZE = 25  # Much larger starting size
+GROWTH_RATE = 4      # Maze grows much faster each level
+MAX_GRID_SIZE = 101  # Maximum maze size (must be odd)
 
-# Colors
-WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
-PLAYER_COLOR = (0, 255, 0)
-GOAL_COLOR = (255, 0, 0)
-PATH_COLOR = (200, 200, 200)
-TEXT_COLOR = (50, 50, 50)
+# Themes
+THEMES = {
+    'Classic': {
+        'background': (240, 240, 240),
+        'path': (200, 200, 200),
+        'wall': (0, 0, 0),
+        'player': (0, 120, 255),
+        'goal': (255, 215, 0),
+        'powerup': (255, 0, 255),
+        'enemy': (220, 20, 20),
+        'text': (50, 50, 50)
+    },
+    'Dark': {
+        'background': (15, 15, 15),
+        'path': (40, 40, 40),
+        'wall': (200, 200, 200),
+        'player': (0, 255, 100),
+        'goal': (255, 215, 0),
+        'powerup': (255, 100, 255),
+        'enemy': (255, 50, 50),
+        'text': (220, 220, 220)
+    },
+    'Neon': {
+        'background': (0, 0, 0),
+        'path': (20, 20, 40),
+        'wall': (0, 255, 255),
+        'player': (0, 255, 0),
+        'goal': (255, 255, 0),
+        'powerup': (255, 0, 255),
+        'enemy': (255, 0, 0),
+        'text': (255, 255, 255)
+    }
+}
+current_theme = THEMES['Classic']
 
-# Pygame setup
+# Initialize pygame
 pygame.init()
-screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
-pygame.display.set_caption("Maze Game")
+font = pygame.font.SysFont('Arial', 28, bold=True)
+small_font = pygame.font.SysFont('Arial', 20)
 clock = pygame.time.Clock()
-font = pygame.font.SysFont(None, 36)
 
-# Maze generation
+# Detailed pixelated sprite creation
+def create_player_sprite(size, color):
+    """Create a detailed pixelated person sprite"""
+    surface = pygame.Surface((size, size), pygame.SRCALPHA)
+    pixel_size = max(1, size // 12)
+    
+    # Color palette
+    skin = (255, 220, 177)
+    hair = (101, 67, 33)
+    shirt = color
+    pants = (50, 50, 150)
+    
+    # Head (larger)
+    head_size = pixel_size * 4
+    head_x = (size - head_size) // 2
+    head_y = pixel_size
+    pygame.draw.rect(surface, skin, (head_x, head_y, head_size, head_size))
+    
+    # Hair
+    pygame.draw.rect(surface, hair, (head_x, head_y, head_size, pixel_size * 2))
+    
+    # Eyes
+    eye_size = pixel_size
+    pygame.draw.rect(surface, (0, 0, 0), (head_x + pixel_size, head_y + pixel_size * 2, eye_size, eye_size))
+    pygame.draw.rect(surface, (0, 0, 0), (head_x + pixel_size * 3, head_y + pixel_size * 2, eye_size, eye_size))
+    
+    # Body
+    body_width = pixel_size * 3
+    body_height = pixel_size * 4
+    body_x = (size - body_width) // 2
+    body_y = head_y + head_size
+    pygame.draw.rect(surface, shirt, (body_x, body_y, body_width, body_height))
+    
+    # Arms
+    arm_width = pixel_size
+    arm_height = pixel_size * 3
+    # Left arm
+    pygame.draw.rect(surface, skin, (body_x - pixel_size, body_y, arm_width, arm_height))
+    # Right arm
+    pygame.draw.rect(surface, skin, (body_x + body_width, body_y, arm_width, arm_height))
+    
+    # Legs
+    leg_width = pixel_size
+    leg_height = pixel_size * 3
+    leg_y = body_y + body_height
+    # Left leg
+    pygame.draw.rect(surface, pants, (body_x + pixel_size // 2, leg_y, leg_width, leg_height))
+    # Right leg
+    pygame.draw.rect(surface, pants, (body_x + body_width - pixel_size - pixel_size // 2, leg_y, leg_width, leg_height))
+    
+    return surface
+
+def create_enemy_sprite(size, color, frame=0):
+    """Create an animated menacing enemy sprite"""
+    surface = pygame.Surface((size, size), pygame.SRCALPHA)
+    pixel_size = max(1, size // 12)
+    
+    # Animation offset
+    bob_offset = int(math.sin(frame * 0.3) * 2)
+    
+    # Dark colors
+    dark_red = (100, 0, 0)
+    bright_red = color
+    black = (0, 0, 0)
+    yellow = (255, 255, 0)
+    
+    # Main body (larger and more menacing)
+    body_size = pixel_size * 6
+    body_x = (size - body_size) // 2
+    body_y = pixel_size * 2 + bob_offset
+    pygame.draw.rect(surface, dark_red, (body_x, body_y, body_size, body_size))
+    pygame.draw.rect(surface, bright_red, (body_x + pixel_size, body_y + pixel_size, body_size - pixel_size * 2, body_size - pixel_size * 2))
+    
+    # Spikes on top
+    for i in range(3):
+        spike_x = body_x + pixel_size * (1 + i * 2)
+        spike_y = body_y - pixel_size * 2
+        pygame.draw.polygon(surface, bright_red, [
+            (spike_x, spike_y),
+            (spike_x + pixel_size, spike_y),
+            (spike_x + pixel_size // 2, spike_y - pixel_size)
+        ])
+    
+    # Glowing eyes
+    eye_size = pixel_size * 2
+    pygame.draw.rect(surface, yellow, (body_x + pixel_size, body_y + pixel_size * 2, eye_size, eye_size))
+    pygame.draw.rect(surface, yellow, (body_x + pixel_size * 4, body_y + pixel_size * 2, eye_size, eye_size))
+    pygame.draw.rect(surface, bright_red, (body_x + pixel_size + pixel_size//2, body_y + pixel_size * 2 + pixel_size//2, pixel_size, pixel_size))
+    pygame.draw.rect(surface, bright_red, (body_x + pixel_size * 4 + pixel_size//2, body_y + pixel_size * 2 + pixel_size//2, pixel_size, pixel_size))
+    
+    # Menacing mouth
+    mouth_width = pixel_size * 3
+    mouth_y = body_y + pixel_size * 4
+    pygame.draw.rect(surface, black, (body_x + pixel_size + pixel_size//2, mouth_y, mouth_width, pixel_size))
+    
+    # Claws/arms
+    for side in [-1, 1]:
+        claw_x = body_x + body_size // 2 + side * (body_size // 2 + pixel_size)
+        claw_y = body_y + pixel_size * 2
+        for i in range(3):
+            pygame.draw.rect(surface, bright_red, (claw_x + side * i * pixel_size // 2, claw_y + i * pixel_size, pixel_size, pixel_size * 2))
+    
+    return surface
+
+def create_goal_sprite(size, color, frame=0):
+    """Create an animated treasure chest sprite"""
+    surface = pygame.Surface((size, size), pygame.SRCALPHA)
+    pixel_size = max(1, size // 10)
+    
+    # Animation - gentle glow pulse
+    glow_intensity = int(50 + 30 * math.sin(frame * 0.2))
+    glow_color = (255, 255, min(255, 100 + glow_intensity))
+    
+    # Chest colors
+    wood = (139, 69, 19)
+    gold = color
+    metal = (169, 169, 169)
+    
+    # Chest base
+    chest_width = pixel_size * 6
+    chest_height = pixel_size * 4
+    chest_x = (size - chest_width) // 2
+    chest_y = size - chest_height - pixel_size * 2
+    
+    pygame.draw.rect(surface, wood, (chest_x, chest_y, chest_width, chest_height))
+    
+    # Chest lid
+    lid_height = pixel_size * 2
+    pygame.draw.rect(surface, wood, (chest_x, chest_y - lid_height, chest_width, lid_height))
+    
+    # Gold trim
+    pygame.draw.rect(surface, gold, (chest_x, chest_y - pixel_size // 2, chest_width, pixel_size))
+    pygame.draw.rect(surface, gold, (chest_x, chest_y + chest_height - pixel_size // 2, chest_width, pixel_size))
+    
+    # Lock
+    lock_size = pixel_size * 2
+    lock_x = chest_x + (chest_width - lock_size) // 2
+    lock_y = chest_y + pixel_size
+    pygame.draw.rect(surface, metal, (lock_x, lock_y, lock_size, lock_size))
+    
+    # Glowing effect
+    for i in range(3):
+        alpha = max(0, glow_intensity - i * 20)
+        glow_surf = pygame.Surface((size, size), pygame.SRCALPHA)
+        pygame.draw.circle(glow_surf, (*glow_color, alpha), (size // 2, size // 2), pixel_size * (4 + i))
+        surface.blit(glow_surf, (0, 0), special_flags=pygame.BLEND_ADD)
+    
+    return surface
+
+def create_powerup_sprite(size, color, frame=0):
+    """Create an animated magical crystal sprite"""
+    surface = pygame.Surface((size, size), pygame.SRCALPHA)
+    pixel_size = max(1, size // 8)
+    
+    # Rotation and floating animation
+    rotation = frame * 3
+    float_offset = int(math.sin(frame * 0.4) * 3)
+    
+    center = size // 2
+    crystal_size = pixel_size * 3
+    
+    # Crystal body with rotation
+    crystal_points = []
+    for angle in range(0, 360, 60):  # Hexagonal crystal
+        rad = math.radians(angle + rotation)
+        x = center + int(crystal_size * math.cos(rad))
+        y = center + int(crystal_size * math.sin(rad)) + float_offset
+        crystal_points.append((x, y))
+    
+    # Draw crystal with gradient effect
+    pygame.draw.polygon(surface, color, crystal_points)
+    
+    # Inner bright core
+    inner_points = []
+    for angle in range(0, 360, 60):
+        rad = math.radians(angle + rotation)
+        x = center + int((crystal_size - pixel_size) * math.cos(rad))
+        y = center + int((crystal_size - pixel_size) * math.sin(rad)) + float_offset
+        inner_points.append((x, y))
+    
+    bright_color = tuple(min(255, c + 100) for c in color)
+    pygame.draw.polygon(surface, bright_color, inner_points)
+    
+    # Sparkles around the crystal
+    for i in range(6):
+        angle = (frame * 5 + i * 60) % 360
+        rad = math.radians(angle)
+        sparkle_x = center + int((crystal_size + pixel_size * 2) * math.cos(rad))
+        sparkle_y = center + int((crystal_size + pixel_size * 2) * math.sin(rad)) + float_offset
+        sparkle_color = (255, 255, 255, 200)
+        pygame.draw.circle(surface, (255, 255, 255), (sparkle_x, sparkle_y), pixel_size // 2)
+    
+    return surface
+
+def create_wall_sprite(size, color):
+    """Create detailed stone wall sprite"""
+    surface = pygame.Surface((size, size))
+    surface.fill(color)
+    
+    pixel_size = max(1, size // 8)
+    
+    # Create stone brick pattern
+    if color == (0, 0, 0) or sum(color) < 300:  # Dark walls
+        mortar = tuple(min(255, c + 30) for c in color)
+        highlight = tuple(min(255, c + 60) for c in color)
+    else:  # Light walls
+        mortar = tuple(max(0, c - 30) for c in color)
+        highlight = tuple(max(0, c - 60) for c in color)
+    
+    # Draw brick pattern
+    brick_height = size // 3
+    for row in range(3):
+        y = row * brick_height
+        offset = (pixel_size * 2) if row % 2 else 0
+        
+        # Horizontal mortar line
+        pygame.draw.line(surface, mortar, (0, y), (size, y), pixel_size // 2)
+        
+        # Vertical mortar lines
+        for col in range(3):
+            x = col * (size // 3) + offset
+            if 0 <= x < size:
+                pygame.draw.line(surface, mortar, (x, y), (x, y + brick_height), pixel_size // 2)
+    
+    # Add some texture variation
+    for _ in range(size // 4):
+        x = random.randint(0, size - 1)
+        y = random.randint(0, size - 1)
+        pygame.draw.rect(surface, highlight, (x, y, pixel_size // 2, pixel_size // 2))
+    
+    return surface
+
+# Enhanced sprite cache and animation
+sprite_cache = {}
+animation_frame = 0
+
+def get_sprite(sprite_type, size, color, frame=0):
+    cache_key = (sprite_type, size, tuple(color) if isinstance(color, list) else color, frame // 5)
+    
+    if cache_key not in sprite_cache:
+        if sprite_type == 'player':
+            sprite_cache[cache_key] = create_player_sprite(size, color)
+        elif sprite_type == 'enemy':
+            sprite_cache[cache_key] = create_enemy_sprite(size, color, frame)
+        elif sprite_type == 'goal':
+            sprite_cache[cache_key] = create_goal_sprite(size, color, frame)
+        elif sprite_type == 'powerup':
+            sprite_cache[cache_key] = create_powerup_sprite(size, color, frame)
+        elif sprite_type == 'wall':
+            sprite_cache[cache_key] = create_wall_sprite(size, color)
+    
+    return sprite_cache[cache_key]
+
+# Maze generation with more complexity
 DIRS = [(0, -2), (2, 0), (0, 2), (-2, 0)]
 
 def generate_maze(width, height):
     maze = [['#'] * width for _ in range(height)]
 
     def is_in_bounds(x, y):
-        return 0 < x < width-1 and 0 < y < height-1
+        return 0 < x < width - 1 and 0 < y < height - 1
 
     def carve(x, y):
         maze[y][x] = ' '
-        random.shuffle(DIRS)
-        for dx, dy in DIRS:
+        directions = DIRS.copy()
+        random.shuffle(directions)
+        for dx, dy in directions:
             nx, ny = x + dx, y + dy
             if is_in_bounds(nx, ny) and maze[ny][nx] == '#':
                 maze[y + dy // 2][x + dx // 2] = ' '
                 carve(nx, ny)
 
     carve(1, 1)
+    
+    # Add some random dead ends removal for easier navigation (but still challenging)
+    if width > 30:
+        for _ in range(width // 10):
+            x = random.randrange(1, width - 1, 2)
+            y = random.randrange(1, height - 1, 2)
+            if maze[y][x] == '#':
+                neighbors = [(x+dx, y+dy) for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]]
+                path_neighbors = [(nx, ny) for nx, ny in neighbors if 0 <= nx < width and 0 <= ny < height and maze[ny][nx] == ' ']
+                if len(path_neighbors) >= 2:
+                    maze[y][x] = ' '
+    
     return maze
 
-def draw_maze(maze, player_pos, goal_pos, score):
-    screen.fill(WHITE)
+def find_goal(maze):
+    # Place goal in one of the corners (farthest from start)
+    corners = [(len(maze[0]) - 2, len(maze) - 2), (1, len(maze) - 2), (len(maze[0]) - 2, 1)]
+    for x, y in corners:
+        if maze[y][x] == ' ':
+            return x, y
+    
+    # Fallback to any far position
+    for y in range(len(maze) - 2, 0, -1):
+        for x in range(len(maze[0]) - 2, 0, -1):
+            if maze[y][x] == ' ':
+                return x, y
+    return 1, 1
+
+def place_random_item(maze, avoid_positions, prefer_far=False):
+    empty_spaces = [(x, y) for y in range(len(maze)) for x in range(len(maze[0]))
+                    if maze[y][x] == ' ' and (x, y) not in avoid_positions]
+    
+    if prefer_far and empty_spaces:
+        # Prefer positions far from start (1,1)
+        start_x, start_y = 1, 1
+        empty_spaces.sort(key=lambda pos: abs(pos[0] - start_x) + abs(pos[1] - start_y), reverse=True)
+        return empty_spaces[random.randint(0, min(4, len(empty_spaces) - 1))]
+    
+    return random.choice(empty_spaces) if empty_spaces else (1, 1)
+
+# Enhanced enemy AI with pathfinding
+def find_path_to_player(enemy_pos, player_pos, maze):
+    """Simple A* pathfinding for smarter enemy movement"""
+    ex, ey = enemy_pos
+    px, py = player_pos
+    
+    if ex == px and ey == py:
+        return ex, ey
+    
+    # Simple pathfinding - check if we can move closer
+    possible_moves = []
+    current_distance = abs(ex - px) + abs(ey - py)
+    
+    for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+        new_x, new_y = ex + dx, ey + dy
+        if (0 <= new_x < len(maze[0]) and 0 <= new_y < len(maze) and 
+            maze[new_y][new_x] == ' '):
+            new_distance = abs(new_x - px) + abs(new_y - py)
+            possible_moves.append((new_x, new_y, new_distance))
+    
+    if not possible_moves:
+        return ex, ey
+    
+    # Sort by distance to player (closest first)
+    possible_moves.sort(key=lambda x: x[2])
+    
+    # Add some randomness but prefer closer moves
+    if len(possible_moves) > 1 and random.random() < 0.3:  # 30% chance of random move
+        return possible_moves[random.randint(0, min(1, len(possible_moves) - 1))][:2]
+    else:
+        return possible_moves[0][:2]  # Best move
+
+def draw_maze(screen, maze, player_pos, goal_pos, score, level, powerup_pos, enemies, speed_boost):
+    global animation_frame
+    animation_frame += 1
+    
+    # Calculate viewport for large mazes
+    screen_width, screen_height = screen.get_size()
+    max_cells_x = screen_width // CELL_SIZE
+    max_cells_y = screen_height // CELL_SIZE
+    
+    player_x, player_y = player_pos
+    
+    # Center camera on player
+    start_x = max(0, min(player_x - max_cells_x // 2, len(maze[0]) - max_cells_x))
+    start_y = max(0, min(player_y - max_cells_y // 2, len(maze) - max_cells_y))
+    end_x = min(len(maze[0]), start_x + max_cells_x)
+    end_y = min(len(maze), start_y + max_cells_y)
+    
+    # Draw visible maze
+    for y in range(start_y, end_y):
+        for x in range(start_x, end_x):
+            screen_x = (x - start_x) * CELL_SIZE
+            screen_y = (y - start_y) * CELL_SIZE
+            rect = pygame.Rect(screen_x, screen_y, CELL_SIZE, CELL_SIZE)
+            
+            if maze[y][x] == '#':
+                wall_sprite = get_sprite('wall', CELL_SIZE, current_theme['wall'])
+                screen.blit(wall_sprite, rect.topleft)
+            else:
+                pygame.draw.rect(screen, current_theme['path'], rect)
+
+    # Draw game objects (only if visible)
+    def draw_if_visible(pos, sprite_type):
+        x, y = pos
+        if start_x <= x < end_x and start_y <= y < end_y:
+            screen_x = (x - start_x) * CELL_SIZE
+            screen_y = (y - start_y) * CELL_SIZE
+            sprite = get_sprite(sprite_type, CELL_SIZE, current_theme[sprite_type], animation_frame)
+            screen.blit(sprite, (screen_x, screen_y))
+    
+    # Draw player
+    draw_if_visible(player_pos, 'player')
+    
+    # Draw goal
+    draw_if_visible(goal_pos, 'goal')
+    
+    # Draw powerup
+    if powerup_pos != (-1, -1):
+        draw_if_visible(powerup_pos, 'powerup')
+    
+    # Draw enemies
+    for enemy_pos in enemies:
+        draw_if_visible(enemy_pos, 'enemy')
+    
+    # Enhanced UI
+    ui_y = 10
+    
+    # Score and level
+    score_text = font.render(f"Score: {score}", True, current_theme['text'])
+    level_text = font.render(f"Level: {level}", True, current_theme['text'])
+    
+    # Background for UI
+    ui_bg = pygame.Surface((250, 100), pygame.SRCALPHA)
+    ui_bg.fill((*current_theme['background'], 180))
+    screen.blit(ui_bg, (5, 5))
+    
+    screen.blit(score_text, (10, ui_y))
+    screen.blit(level_text, (10, ui_y + 30))
+    
+    # Speed boost indicator
+    if speed_boost > 0:
+        boost_text = small_font.render(f"SPEED BOOST: {speed_boost}", True, (255, 255, 0))
+        screen.blit(boost_text, (10, ui_y + 60))
+    
+    # Mini-map for large mazes
+    if len(maze) > 30:
+        draw_minimap(screen, maze, player_pos, goal_pos, enemies, screen_width, screen_height)
+    
+    pygame.display.flip()
+
+def draw_minimap(screen, maze, player_pos, goal_pos, enemies, screen_width, screen_height):
+    """Draw a small minimap in the corner"""
+    minimap_size = 120
+    minimap_x = screen_width - minimap_size - 10
+    minimap_y = 10
+    
+    # Background
+    minimap_bg = pygame.Surface((minimap_size, minimap_size), pygame.SRCALPHA)
+    minimap_bg.fill((0, 0, 0, 100))
+    screen.blit(minimap_bg, (minimap_x, minimap_y))
+    
+    # Scale
+    scale_x = minimap_size / len(maze[0])
+    scale_y = minimap_size / len(maze)
+    
+    # Draw maze outline
     for y in range(len(maze)):
         for x in range(len(maze[0])):
-            rect = pygame.Rect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE)
-            if maze[y][x] == '#':
-                pygame.draw.rect(screen, BLACK, rect)
-            else:
-                pygame.draw.rect(screen, PATH_COLOR, rect)
-
-    # Draw player and goal
+            if maze[y][x] == ' ':
+                pixel_x = minimap_x + int(x * scale_x)
+                pixel_y = minimap_y + int(y * scale_y)
+                pygame.draw.rect(screen, (100, 100, 100), (pixel_x, pixel_y, max(1, int(scale_x)), max(1, int(scale_y))))
+    
+    # Draw player
     px, py = player_pos
+    player_x = minimap_x + int(px * scale_x)
+    player_y = minimap_y + int(py * scale_y)
+    pygame.draw.circle(screen, current_theme['player'], (player_x, player_y), 3)
+    
+    # Draw goal
     gx, gy = goal_pos
-    pygame.draw.rect(screen, PLAYER_COLOR, (px * CELL_SIZE, py * CELL_SIZE, CELL_SIZE, CELL_SIZE))
-    pygame.draw.rect(screen, GOAL_COLOR, (gx * CELL_SIZE, gy * CELL_SIZE, CELL_SIZE, CELL_SIZE))
+    goal_x = minimap_x + int(gx * scale_x)
+    goal_y = minimap_y + int(gy * scale_y)
+    pygame.draw.circle(screen, current_theme['goal'], (goal_x, goal_y), 2)
+    
+    # Draw enemies
+    for ex, ey in enemies:
+        enemy_x = minimap_x + int(ex * scale_x)
+        enemy_y = minimap_y + int(ey * scale_y)
+        pygame.draw.circle(screen, current_theme['enemy'], (enemy_x, enemy_y), 2)
 
-    # Draw score
-    text = font.render(f"Score: {score}", True, TEXT_COLOR)
-    screen.blit(text, (10, 10))
+def show_message(screen, message, window_width, window_height):
+    overlay = pygame.Surface((window_width, window_height), pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 128))
+    screen.blit(overlay, (0, 0))
+    
+    lines = message.split('\n')
+    total_height = len(lines) * 50
+    start_y = (window_height - total_height) // 2
+    
+    for i, line in enumerate(lines):
+        text = font.render(line, True, current_theme['text'])
+        rect = text.get_rect(center=(window_width // 2, start_y + i * 50))
+        
+        # Text background
+        bg_rect = rect.inflate(20, 10)
+        pygame.draw.rect(screen, current_theme['background'], bg_rect)
+        pygame.draw.rect(screen, current_theme['text'], bg_rect, 2)
+        
+        screen.blit(text, rect)
     pygame.display.flip()
 
-def show_message(message):
-    screen.fill(WHITE)
-    text = font.render(message, True, TEXT_COLOR)
-    rect = text.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2))
-    screen.blit(text, rect)
-    pygame.display.flip()
     waiting = True
     while waiting:
         for event in pygame.event.get():
-            if event.type == pygame.KEYDOWN or event.type == pygame.MOUSEBUTTONDOWN:
+            if event.type in [pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN]:
                 waiting = False
             elif event.type == pygame.QUIT:
                 pygame.quit()
-                exit()
+                sys.exit()
+
+def choose_theme():
+    global current_theme
+    print("Choose a theme:")
+    for idx, theme_name in enumerate(THEMES.keys()):
+        print(f"{idx + 1}. {theme_name}")
+    try:
+        choice = input("Enter number: ")
+        selected = list(THEMES.keys())[int(choice) - 1]
+        current_theme = THEMES[selected]
+        print(f"Selected: {selected}")
+    except (ValueError, IndexError):
+        print("Invalid choice, using Classic theme")
+        current_theme = THEMES['Classic']
+
+def choose_difficulty():
+    global GROWTH_RATE, BASE_GRID_SIZE
+    print("Choose difficulty:")
+    print("1. Normal (Challenging)")
+    print("2. Hard (Very Large)")  
+    print("3. Extreme (Massive)")
+    try:
+        choice = input("Enter number: ")
+        if choice == '1':
+            GROWTH_RATE = 3
+            BASE_GRID_SIZE = 25
+        elif choice == '2':
+            GROWTH_RATE = 5
+            BASE_GRID_SIZE = 35
+        elif choice == '3':
+            GROWTH_RATE = 7
+            BASE_GRID_SIZE = 45
+        else:
+            print("Invalid choice, using Normal difficulty")
+    except ValueError:
+        print("Invalid input, using Normal difficulty")
+
+# Game setup
+choose_theme()
+choose_difficulty()
+
+score = 0
+level = 0
+speed_boost = 0
 
 # Main game loop
-score = 0
-running = True
+while True:
+    level += 1
+    grid_size = min(MAX_GRID_SIZE, BASE_GRID_SIZE + (level - 1) * GROWTH_RATE)
+    if grid_size % 2 == 0:
+        grid_size += 1
 
-while running:
-    maze = generate_maze(GRID_WIDTH, GRID_HEIGHT)
+    print(f"Generating Level {level} - Maze size: {grid_size}x{grid_size}")
+    maze = generate_maze(grid_size, grid_size)
+    
     player_x, player_y = 1, 1
-    goal_x, goal_y = GRID_WIDTH - 2, GRID_HEIGHT - 2
+    goal_x, goal_y = find_goal(maze)
+    powerup_x, powerup_y = place_random_item(maze, [(1, 1), (goal_x, goal_y)], prefer_far=True)
+    
+    # Multiple enemies for higher levels
+    num_enemies = min(5, 1 + level // 3)
+    enemies = []
+    avoid_positions = [(1, 1), (goal_x, goal_y), (powerup_x, powerup_y)]
+    
+    for _ in range(num_enemies):
+        enemy_pos = place_random_item(maze, avoid_positions, prefer_far=True)
+        enemies.append(enemy_pos)
+        avoid_positions.append(enemy_pos)
 
+    # Dynamic window sizing
+    max_window_width = 1200
+    max_window_height = 800
+    window_width = min(max_window_width, grid_size * CELL_SIZE)
+    window_height = min(max_window_height, grid_size * CELL_SIZE)
+    
+    screen = pygame.display.set_mode((window_width, window_height))
+    pygame.display.set_caption(f"Epic Maze Adventure - Level {level} ({grid_size}x{grid_size})")
+
+    enemy_move_timer = 0
+    enemy_speed = max(15, 60 - level * 3)  # Enemies get faster each level
+
+    # Level loop
     while True:
-        draw_maze(maze, (player_x, player_y), (goal_x, goal_y), score)
+        screen.fill(current_theme['background'])
+        draw_maze(screen, maze, (player_x, player_y), (goal_x, goal_y), score, level, 
+                 (powerup_x, powerup_y), enemies, speed_boost)
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                running = False
-                break
+                pygame.quit()
+                sys.exit()
 
+        # Enhanced movement with diagonal support
         keys = pygame.key.get_pressed()
         dx = dy = 0
-        if keys[pygame.K_LEFT]:
-            dx = -1
-        elif keys[pygame.K_RIGHT]:
-            dx = 1
-        elif keys[pygame.K_UP]:
-            dy = -1
-        elif keys[pygame.K_DOWN]:
-            dy = 1
+        if keys[pygame.K_LEFT] or keys[pygame.K_a]: dx = -1
+        elif keys[pygame.K_RIGHT] or keys[pygame.K_d]: dx = 1
+        if keys[pygame.K_UP] or keys[pygame.K_w]: dy = -1
+        elif keys[pygame.K_DOWN] or keys[pygame.K_s]: dy = 1
 
+        # Move player
         new_x, new_y = player_x + dx, player_y + dy
-        if 0 <= new_x < GRID_WIDTH and 0 <= new_y < GRID_HEIGHT:
+        if 0 <= new_x < grid_size and 0 <= new_y < grid_size:
             if maze[new_y][new_x] == ' ':
                 player_x, player_y = new_x, new_y
 
+        # Check powerup collection
+        if (player_x, player_y) == (powerup_x, powerup_y):
+            speed_boost = 30  # Longer boost duration
+            powerup_x, powerup_y = (-1, -1)
+
+        # Check goal reached
         if (player_x, player_y) == (goal_x, goal_y):
-            score += 1
-            show_message(f"Level Complete! Score: {score}\nPress any key to continue.")
+            score += level * 10  # More points for higher levels
+            bonus_msg = f"Level {level} Complete!\nScore: {score}\nBonus: +{level * 10} points"
+            if len(maze) > 50:
+                bonus_msg += f"\nMaze Size: {grid_size}x{grid_size} - Epic!"
+            show_message(screen, bonus_msg + "\nPress any key to continue.", window_width, window_height)
             break
 
-        clock.tick(10)
+        # Check enemy collision
+        if (player_x, player_y) in enemies:
+            death_msg = f"You were caught by an enemy!\nFinal Score: {score}\nReached Level: {level}"
+            show_message(screen, death_msg + "\nPress any key to restart.", window_width, window_height)
+            score = 0
+            level = 0
+            break
 
-pygame.quit()
+        # Move enemies with enhanced AI
+        enemy_move_timer += 1
+        if enemy_move_timer >= (enemy_speed if speed_boost == 0 else enemy_speed // 2):
+            enemy_move_timer = 0
+            new_enemies = []
+            for enemy_pos in enemies:
+                new_pos = find_path_to_player(enemy_pos, (player_x, player_y), maze)
+                new_enemies.append(new_pos)
+            enemies = new_enemies
+
+        # Decrease speed boost
+        if speed_boost > 0:
+            speed_boost -= 1
+
+        # Game speed
+        clock.tick(15 + (10 if speed_boost > 0 else 0))
